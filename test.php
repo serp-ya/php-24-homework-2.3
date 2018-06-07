@@ -1,4 +1,4 @@
-<?php 
+<?php
 require_once('./config.php');
 
 if (empty($_GET) && empty($_POST)) {
@@ -8,20 +8,29 @@ if (empty($_GET) && empty($_POST)) {
 if (!empty($_GET) && (!isset($_GET['testid']) || empty($_GET['testid']))) {
   exit('Передайте параметр testid');
   
-} elseif (!empty($_POST) && (!isset($_POST['testid']) || empty($_POST['testid']))) {
-  exit('Тест прошёл не корректно');
 }
 
 if (!empty($_GET['testid'])) {
-  $testId = 'id' . $_GET['testid'];
+  session_start();
+  $testId = $_SESSION['testid'] = 'id' . $_GET['testid'];
+
 } else {
-  $testId = $_POST['testid'];
+  session_start();
+  $testId = $_SESSION['testid'];
 }
 
-$testJson = file_get_contents($testsDir . $testId . '.json');
+$fileUrl = $testsDir . $testId . '.json';
+
+if (!file_exists($fileUrl)) {
+  http_response_code(404);
+  exit("Тест $testId не найден");
+}
+
+$testJson = file_get_contents($fileUrl);
 
 if ($testJson === false) {
-    exit("Тест $testId не найден");
+    http_response_code(500);
+    exit('Server internal error');
 }
 
 $testData = json_decode($testJson, true);
@@ -33,6 +42,33 @@ if (empty($testData['questions'])) {
 }
 
 $testQuestionsArray = $testData['questions'];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  $sertificateTemplateUrl = __DIR__ . '\src\setificate-template.png';
+  $userName = $_POST['name'] ? $_POST['name'] : 'Unknown';
+  $testsCount = count($testQuestionsArray);
+  $correctTestsCount = count(array_filter($_POST, filterCorrect));
+
+  $image = imagecreatefrompng($sertificateTemplateUrl);
+  $blackColor = imagecolorexact($image, 0, 0, 0);
+
+  // Не получилось конвертировать русские символы, печатались крокозябры
+  // пробовал по методичкам и более 5 решений из интернета
+  $font = __DIR__ . '\font\arial.ttf';
+
+  imagettftext($image, 40, 0, 180, 450, $blackColor, $font, $userName);
+  imagettftext($image, 20, 0, 180, 525, $blackColor, $font, $testName);
+  imagettftext($image, 20, 0, 180, 650, $blackColor, $font, $correctTestsCount . '\\' . $testsCount);
+
+  header('Content-Type: image/png');
+  imagepng($image);
+  imagedestroy($image);
+  exit;
+}
+
+function filterCorrect($value) {
+  return $value === 'correct';
+}
 
 ?>
 
@@ -49,7 +85,7 @@ $testQuestionsArray = $testData['questions'];
 </head>
 <body>
 
-<?php if (!empty($_GET)): ?>
+<?php if ($_SERVER['REQUEST_METHOD'] === 'GET'): ?>
 <!-- GET -->
 
 <h1>
@@ -75,7 +111,6 @@ $testQuestionsArray = $testData['questions'];
             <?php continue; ?>
           <?php endif; ?>
 
-          <!-- TODO: разобраться с correct -->
           <?php $correct = isset($answer['correct']) && $answer['correct'] ? 'correct' : ''; ?>
 
           <label>
@@ -87,12 +122,15 @@ $testQuestionsArray = $testData['questions'];
       </fieldset>
   <?php endforeach; ?>
 
-  <input type="hidden" name="testid" value="<?php echo $testId; ?>" />
+  <fieldset>
+    Ваше имя: <input name="name" type="text"><br />
+  </fieldset>
   <input type="submit" placeholder="Отправить"/>
 </form>
 
-<?php elseif (!empty($_POST)): ?>
+<?php elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST)): ?>
 <!-- POST -->
+<!-- Не сработает, пока есть метод возврата картинки -->
   <h2>Результаты теста:</h2>
 
   <ul>

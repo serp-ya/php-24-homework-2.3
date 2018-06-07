@@ -14,7 +14,7 @@ if (isset($_FILES['testfile']) && !empty($_FILES['testfile'])) {
     $fileName = 'id' . ++$id . '.json';
     
     move_uploaded_file($tmpPath, $testsDir . $fileName);
-    echo 'File did upload';
+    header('location: ./list.php');
 }
 ?>
 
